@@ -15,9 +15,17 @@ NSMutableDictionary *callbackIds;
 NSDictionary* pendingCallFromRecents;
 BOOL monitorAudioRouteChange = NO;
 BOOL enableDTMF = NO;
+BOOL callkitSupported = YES;
 
 - (void)pluginInitialize
 {
+    NSLocale *userLocale = [NSLocale currentLocale];
+    if ([userLocale.countryCode containsString: @"CN"] || [userLocale.countryCode containsString: @"CHN"]) {
+        NSLog(@"currentLocale is China so we cannot use CallKit.");
+        callkitSupported = NO;
+        return;
+    }
+    
     CXProviderConfiguration *providerConfiguration;
     appName = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"];
     providerConfiguration = [[CXProviderConfiguration alloc] initWithLocalizedName:appName];
@@ -51,6 +59,24 @@ BOOL enableDTMF = NO;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleAudioRouteChange:) name:AVAudioSessionRouteChangeNotification object:nil];
 }
 
+- (BOOL)canUseCallKit:(CDVInvokedUrlCommand*)command
+{
+    if (!callkitSupported) {
+        NSLog(@"currentLocale is China so we cannot use CallKit.");
+        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"currentLocale is China so we cannot use CallKit."];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    }
+    return callkitSupported;
+}
+
+
+- (void)isSupported:(CDVInvokedUrlCommand*)command
+{
+    if ([self canUseCallKit:command]) {
+        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    }
+}
 // CallKit - Interface
 - (void)updateProviderConfig
 {
@@ -73,32 +99,35 @@ BOOL enableDTMF = NO;
     if (@available(iOS 11.0, *)) {
         providerConfiguration.includesCallsInRecents = includeInRecents;
     }
-
+    
     self.provider.configuration = providerConfiguration;
 }
 
 - (void)setupAudioSession
 {
     @try {
-      AVAudioSession *sessionInstance = [AVAudioSession sharedInstance];
-      [sessionInstance setCategory:AVAudioSessionCategoryPlayAndRecord error:nil];
-      [sessionInstance setMode:AVAudioSessionModeVoiceChat error:nil];
-      NSTimeInterval bufferDuration = .005;
-      [sessionInstance setPreferredIOBufferDuration:bufferDuration error:nil];
-      [sessionInstance setPreferredSampleRate:44100 error:nil];
-      NSLog(@"Configuring Audio");
+        AVAudioSession *sessionInstance = [AVAudioSession sharedInstance];
+        [sessionInstance setCategory:AVAudioSessionCategoryPlayAndRecord error:nil];
+        [sessionInstance setMode:AVAudioSessionModeVoiceChat error:nil];
+        NSTimeInterval bufferDuration = .005;
+        [sessionInstance setPreferredIOBufferDuration:bufferDuration error:nil];
+        [sessionInstance setPreferredSampleRate:44100 error:nil];
+        NSLog(@"Configuring Audio");
     }
     @catch (NSException *exception) {
-       NSLog(@"Unknown error returned from setupAudioSession");
+        NSLog(@"Unknown error returned from setupAudioSession");
     }
     return;
 }
 
 - (void)setAppName:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
     CDVPluginResult* pluginResult = nil;
     NSString* proposedAppName = [command.arguments objectAtIndex:0];
-
+    
     if (proposedAppName != nil && [proposedAppName length] > 0) {
         appName = proposedAppName;
         [self updateProviderConfig];
@@ -106,15 +135,19 @@ BOOL enableDTMF = NO;
     } else {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"App Name Can't Be Empty"];
     }
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)setIcon:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     NSString* proposedIconName = [command.arguments objectAtIndex:0];
-
+    
     if (proposedIconName == nil || [proposedIconName length] == 0) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Icon Name Can't Be Empty"];
     } else if([UIImage imageNamed:proposedIconName] == nil) {
@@ -124,15 +157,19 @@ BOOL enableDTMF = NO;
         [self updateProviderConfig];
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Icon Changed Successfully"];
     }
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)setRingtone:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     NSString* proposedRingtoneName = [command.arguments objectAtIndex:0];
-
+    
     if (proposedRingtoneName == nil || [proposedRingtoneName length] == 0) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Ringtone Name Can't Be Empty"];
     } else {
@@ -140,12 +177,16 @@ BOOL enableDTMF = NO;
         [self updateProviderConfig];
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Ringtone Changed Successfully"];
     }
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)setIncludeInRecents:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     includeInRecents = [[command.arguments objectAtIndex:0] boolValue];
     [self updateProviderConfig];
@@ -155,6 +196,10 @@ BOOL enableDTMF = NO;
 
 - (void)setDTMFState:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     enableDTMF = [[command.arguments objectAtIndex:0] boolValue];
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"enableDTMF Changed Successfully"];
@@ -163,6 +208,10 @@ BOOL enableDTMF = NO;
 
 - (void)setVideo:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     hasVideo = [[command.arguments objectAtIndex:0] boolValue];
     [self updateProviderConfig];
@@ -172,17 +221,21 @@ BOOL enableDTMF = NO;
 
 - (void)receiveCall:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     BOOL hasId = ![[command.arguments objectAtIndex:1] isEqual:[NSNull null]];
     CDVPluginResult* pluginResult = nil;
     NSString* callName = [command.arguments objectAtIndex:0];
     NSString* callId = hasId?[command.arguments objectAtIndex:1]:callName;
     NSUUID *callUUID = [[NSUUID alloc] init];
-
+    
     if (hasId) {
         [[NSUserDefaults standardUserDefaults] setObject:callName forKey:[command.arguments objectAtIndex:1]];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
-
+    
     if (callName != nil && [callName length] > 0) {
         CXHandle *handle = [[CXHandle alloc] initWithType:CXHandleTypePhoneNumber value:callId];
         CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
@@ -193,7 +246,7 @@ BOOL enableDTMF = NO;
         callUpdate.supportsUngrouping = NO;
         callUpdate.supportsHolding = NO;
         callUpdate.supportsDTMF = enableDTMF;
-
+        
         [self.provider reportNewIncomingCallWithUUID:callUUID update:callUpdate completion:^(NSError * _Nullable error) {
             if(error == nil) {
                 [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Incoming call successful"] callbackId:command.callbackId];
@@ -214,16 +267,20 @@ BOOL enableDTMF = NO;
 
 - (void)sendCall:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     BOOL hasId = ![[command.arguments objectAtIndex:1] isEqual:[NSNull null]];
     NSString* callName = [command.arguments objectAtIndex:0];
     NSString* callId = hasId?[command.arguments objectAtIndex:1]:callName;
     NSUUID *callUUID = [[NSUUID alloc] init];
-
+    
     if (hasId) {
         [[NSUserDefaults standardUserDefaults] setObject:callName forKey:[command.arguments objectAtIndex:1]];
         [[NSUserDefaults standardUserDefaults] synchronize];
     }
-
+    
     if (callName != nil && [callName length] > 0) {
         CXHandle *handle = [[CXHandle alloc] initWithType:CXHandleTypePhoneNumber value:callId];
         CXStartCallAction *startCallAction = [[CXStartCallAction alloc] initWithCallUUID:callUUID handle:handle];
@@ -244,24 +301,32 @@ BOOL enableDTMF = NO;
 
 - (void)connectCall:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     NSArray<CXCall *> *calls = self.callController.callObserver.calls;
-
+    
     if([calls count] == 1) {
         [self.provider reportOutgoingCallWithUUID:calls[0].UUID connectedAtDate:nil];
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Call connected successfully"];
     } else {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No call exists for you to connect"];
     }
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)endCall:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     NSArray<CXCall *> *calls = self.callController.callObserver.calls;
-
+    
     if([calls count] == 1) {
         //[self.provider reportCallWithUUID:calls[0].UUID endedAtDate:nil reason:CXCallEndedReasonRemoteEnded];
         CXEndCallAction *endCallAction = [[CXEndCallAction alloc] initWithCallUUID:calls[0].UUID];
@@ -276,12 +341,16 @@ BOOL enableDTMF = NO;
     } else {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"No call exists for you to connect"];
     }
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)registerEvent:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     NSString* eventName = [command.arguments objectAtIndex:0];
     if(callbackIds[eventName] != nil) {
         [callbackIds[eventName] addObject:command.callbackId];
@@ -297,91 +366,111 @@ BOOL enableDTMF = NO;
 
 - (void)mute:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     AVAudioSession *sessionInstance = [AVAudioSession sharedInstance];
     if(sessionInstance.isInputGainSettable) {
-      BOOL success = [sessionInstance setInputGain:0.0 error:nil];
-      if(success) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Muted Successfully"];
-      } else {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
-      }
+        BOOL success = [sessionInstance setInputGain:0.0 error:nil];
+        if(success) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Muted Successfully"];
+        } else {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
+        }
     } else {
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Not muted because this device does not allow changing inputGain"];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Not muted because this device does not allow changing inputGain"];
     }
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)unmute:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     AVAudioSession *sessionInstance = [AVAudioSession sharedInstance];
     if(sessionInstance.isInputGainSettable) {
-      BOOL success = [sessionInstance setInputGain:1.0 error:nil];
-      if(success) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Muted Successfully"];
-      } else {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
-      }
+        BOOL success = [sessionInstance setInputGain:1.0 error:nil];
+        if(success) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Muted Successfully"];
+        } else {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
+        }
     } else {
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Not unmuted because this device does not allow changing inputGain"];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Not unmuted because this device does not allow changing inputGain"];
     }
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)speakerOn:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     AVAudioSession *sessionInstance = [AVAudioSession sharedInstance];
     BOOL success = [sessionInstance overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker error:nil];
     if(success) {
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Speakerphone is on"];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Speakerphone is on"];
     } else {
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
     }
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)speakerOff:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     AVAudioSession *sessionInstance = [AVAudioSession sharedInstance];
     BOOL success = [sessionInstance overrideOutputAudioPort:AVAudioSessionPortOverrideNone error:nil];
     if(success) {
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Speakerphone is off"];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Speakerphone is off"];
     } else {
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"An error occurred"];
     }
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)callNumber:(CDVInvokedUrlCommand*)command
 {
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
     CDVPluginResult* pluginResult = nil;
     NSString* phoneNumber = [command.arguments objectAtIndex:0];
     NSString* telNumber = [@"tel://" stringByAppendingString:phoneNumber];
     if (@available(iOS 10.0, *)) {
-      [[UIApplication sharedApplication] openURL:[NSURL URLWithString:telNumber]
-                                         options:nil
-                                         completionHandler:^(BOOL success) {
-                                           if(success) {
-                                             CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Call Successful"];
-                                             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-                                           } else {
-                                             CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Call Failed"];
-                                             [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-                                           }
-                                         }];
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:telNumber]
+                                           options:nil
+                                 completionHandler:^(BOOL success) {
+            if(success) {
+                CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Call Successful"];
+                [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+            } else {
+                CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Call Failed"];
+                [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+            }
+        }];
     } else {
-      BOOL success = [[UIApplication sharedApplication] openURL:[NSURL URLWithString:telNumber]];
-      if(success) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Call Successful"];
-      } else {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Call Failed"];
-      }
-      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        BOOL success = [[UIApplication sharedApplication] openURL:[NSURL URLWithString:telNumber]];
+        if(success) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Call Successful"];
+        } else {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Call Failed"];
+        }
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
     }
-
+    
 }
 
 - (void)receiveCallFromRecents:(NSNotification *) notification
@@ -540,13 +629,17 @@ BOOL enableDTMF = NO;
 // PushKit
 - (void)init:(CDVInvokedUrlCommand*)command
 {
-  self.VoIPPushCallbackId = command.callbackId;
-  NSLog(@"[objC] callbackId: %@", self.VoIPPushCallbackId);
-
-  //http://stackoverflow.com/questions/27245808/implement-pushkit-and-test-in-development-behavior/28562124#28562124
-  PKPushRegistry *pushRegistry = [[PKPushRegistry alloc] initWithQueue:dispatch_get_main_queue()];
-  pushRegistry.delegate = self;
-  pushRegistry.desiredPushTypes = [NSSet setWithObject:PKPushTypeVoIP];
+    if (![self canUseCallKit:command]) {
+        return;
+    }
+    
+    self.VoIPPushCallbackId = command.callbackId;
+    NSLog(@"[objC] callbackId: %@", self.VoIPPushCallbackId);
+    
+    //http://stackoverflow.com/questions/27245808/implement-pushkit-and-test-in-development-behavior/28562124#28562124
+    PKPushRegistry *pushRegistry = [[PKPushRegistry alloc] initWithQueue:dispatch_get_main_queue()];
+    pushRegistry.delegate = self;
+    pushRegistry.desiredPushTypes = [NSSet setWithObject:PKPushTypeVoIP];
 }
 
 - (void)pushRegistry:(PKPushRegistry *)registry didUpdatePushCredentials:(PKPushCredentials *)credentials forType:(NSString *)type{
@@ -554,15 +647,15 @@ BOOL enableDTMF = NO;
         NSLog(@"[objC] No device token!");
         return;
     }
-
+    
     //http://stackoverflow.com/a/9372848/534755
     NSLog(@"[objC] Device token: %@", credentials.token);
     const unsigned *tokenBytes = [credentials.token bytes];
     NSString *sToken = [NSString stringWithFormat:@"%08x%08x%08x%08x%08x%08x%08x%08x",
-                         ntohl(tokenBytes[0]), ntohl(tokenBytes[1]), ntohl(tokenBytes[2]),
-                         ntohl(tokenBytes[3]), ntohl(tokenBytes[4]), ntohl(tokenBytes[5]),
-                         ntohl(tokenBytes[6]), ntohl(tokenBytes[7])];
-
+                        ntohl(tokenBytes[0]), ntohl(tokenBytes[1]), ntohl(tokenBytes[2]),
+                        ntohl(tokenBytes[3]), ntohl(tokenBytes[4]), ntohl(tokenBytes[5]),
+                        ntohl(tokenBytes[6]), ntohl(tokenBytes[7])];
+    
     NSMutableDictionary* results = [NSMutableDictionary dictionaryWithCapacity:2];
     [results setObject:sToken forKey:@"deviceToken"];
     [results setObject:@"true" forKey:@"registration"];
@@ -576,7 +669,7 @@ BOOL enableDTMF = NO;
 {
     NSDictionary *payloadDict = payload.dictionaryPayload[@"aps"];
     NSLog(@"[objC] didReceiveIncomingPushWithPayload: %@", payloadDict);
-
+    
     NSString *message = payloadDict[@"alert"];
     NSLog(@"[objC] received VoIP message: %@", message);
     
@@ -599,7 +692,7 @@ BOOL enableDTMF = NO;
         [self receiveCall:newCommand];
     }
     @catch (NSException *exception) {
-       NSLog(@"[objC] error: %@", exception.reason);
+        NSLog(@"[objC] error: %@", exception.reason);
     }
     @finally {
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:results];

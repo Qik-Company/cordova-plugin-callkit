@@ -10,6 +10,7 @@
 @property (nonatomic, copy) NSString *VoIPPushMethodName;
 
 - (void)init:(CDVInvokedUrlCommand*)command;
+- (void)isSupported:(CDVInvokedUrlCommand*)command;
 
 // CallKit
 @property (nonatomic, strong) CXProvider *provider;

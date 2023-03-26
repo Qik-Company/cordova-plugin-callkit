@@ -1,5 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-callkit" version="1.0.0" xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+<plugin id="cordova-plugin-callkit" version="1.0.1"
+    xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android">
     <name>Cordova CallKit</name>
 
     <js-module name="VoIPPushNotification" src="www/VoIPPushNotification.js">
@@ -25,8 +27,7 @@
         </config-file>
 
         <config-file parent="/manifest/application" target="AndroidManifest.xml">
-            <service android:name="com.dmarc.cordovacall.MyConnectionService"
-                    android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <service android:name="com.dmarc.cordovacall.MyConnectionService" android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
                 <intent-filter>
                     <action android:name="android.telecom.ConnectionService" />
                 </intent-filter>
@@ -35,7 +36,7 @@
 
         <source-file src="src/android/CordovaCall.java" target-dir="src/com/dmarc/cordovacall" />
         <source-file src="src/android/MyConnectionService.java" target-dir="src/com/dmarc/cordovacall" />
-  </platform>
+    </platform>
 
     <platform name="ios">
         <config-file target="config.xml" parent="/*">
